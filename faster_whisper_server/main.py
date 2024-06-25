@@ -321,31 +321,38 @@ async def transcribe_stream(
     whisper = load_model(model)
     asr = FasterWhisperASR(whisper, **transcribe_opts)
     audio_stream = AudioStream()
-    async with asyncio.TaskGroup() as tg:
-        tg.create_task(audio_receiver(ws, audio_stream))
-        async for transcription in audio_transcriber(asr, audio_stream):
-            logger.debug(f"Sending transcription: {transcription.text}")
-            if ws.client_state == WebSocketState.DISCONNECTED:
-                break
+    try:
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(audio_receiver(ws, audio_stream))
+            async for transcription in audio_transcriber(asr, audio_stream):
+                logger.debug(f"Sending transcription: {transcription.text}")
+                if ws.client_state == WebSocketState.DISCONNECTED:
+                    break
 
-            if response_format == ResponseFormat.TEXT:
-                await ws.send_text(transcription.text)
-            elif response_format == ResponseFormat.JSON:
-                await ws.send_json(
-                    TranscriptionJsonResponse.from_transcription(
-                        transcription
-                    ).model_dump()
-                )
-            elif response_format == ResponseFormat.VERBOSE_JSON:
-                await ws.send_json(
-                    TranscriptionVerboseJsonResponse.from_transcription(
-                        transcription
-                    ).model_dump()
-                )
+                if response_format == ResponseFormat.TEXT:
+                    await ws.send_text(transcription.text)
+                elif response_format == ResponseFormat.JSON:
+                    await ws.send_json(
+                        TranscriptionJsonResponse.from_transcription(
+                            transcription
+                        ).model_dump()
+                    )
+                elif response_format == ResponseFormat.VERBOSE_JSON:
+                    await ws.send_json(
+                        TranscriptionVerboseJsonResponse.from_transcription(
+                            transcription
+                        ).model_dump()
+                    )
 
-    if not ws.client_state == WebSocketState.DISCONNECTED:
-        logger.info("Closing the connection.")
-        await ws.close()
+    except WebSocketDisconnect as e:
+        logger.info(f"Client disconnected: {e}")
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
+    finally:
+        if ws.client_state != WebSocketState.DISCONNECTED:
+            logger.info("Closing the connection.")
+            await ws.close()
+        audio_stream.close()
 
 
 app = gr.mount_gradio_app(app, create_gradio_demo(config), path="/")
