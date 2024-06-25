@@ -298,7 +298,13 @@ async def audio_receiver(ws: WebSocket, audio_stream: AudioStream) -> None:
         )
     except WebSocketDisconnect as e:
         logger.info(f"Client disconnected: {e}")
-    audio_stream.close()
+    finally:
+        audio_stream.close()
+        if ws.client_state != WebSocketState.DISCONNECTED:
+            try:
+                await ws.close(code=1000)  # Normal closure
+            except Exception as close_exception:
+                logger.error(f"Error during close handshake: {close_exception}")
 
 
 @app.websocket("/v1/audio/transcriptions")
