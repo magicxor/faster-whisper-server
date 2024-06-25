@@ -349,10 +349,11 @@ async def transcribe_stream(
     except Exception as e:
         logger.error(f"An error occurred: {e}")
     finally:
+        if not audio_stream.closed:
+            audio_stream.close()
         if ws.client_state != WebSocketState.DISCONNECTED:
             logger.info("Closing the connection.")
             await ws.close()
-        audio_stream.close()
 
 
 app = gr.mount_gradio_app(app, create_gradio_demo(config), path="/")
