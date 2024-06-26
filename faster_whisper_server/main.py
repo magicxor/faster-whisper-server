@@ -307,6 +307,16 @@ async def audio_receiver(ws: WebSocket, audio_stream: AudioStream) -> None:
                 logger.error(f"Error during close handshake: {close_exception}")
 
 
+async def send_heartbeat(ws: WebSocket) -> None:
+    try:
+        while True:
+            if ws.client_state == WebSocketState.DISCONNECTED:
+                break
+            await ws.send_text("heartbeat")
+            await asyncio.sleep(1)  # Send heartbeat every second
+    except asyncio.CancelledError:
+        logger.info("Heartbeat sender has been cancelled.")
+
 @app.websocket("/v1/audio/transcriptions")
 async def transcribe_stream(
     ws: WebSocket,
@@ -330,6 +340,7 @@ async def transcribe_stream(
     try:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(audio_receiver(ws, audio_stream))
+            tg.create_task(send_heartbeat(ws))  # Schedule heartbeat sender
             async for transcription in audio_transcriber(asr, audio_stream):
                 logger.debug(f"Sending transcription: {transcription.text}")
                 if ws.client_state == WebSocketState.DISCONNECTED:
